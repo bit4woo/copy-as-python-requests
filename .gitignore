@@ -35,3 +35,8 @@ src/burp/IResponseInfo.java
 src/burp/IInterceptedProxyMessage.java
 src/burp/IMessageEditorTab.java
 src/burp/ICookie.java
+/bin/
+/target/
+/.settings/
+.project
+.classpath
