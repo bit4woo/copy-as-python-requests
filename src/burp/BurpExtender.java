@@ -61,6 +61,10 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 
 	private void copyMessages(IHttpRequestResponse[] messages, boolean withSessionObject) {
 		StringBuilder py = new StringBuilder("import requests");
+
+		py.append("\n\nproxy = {\"http\":\"http://127.0.0.1:8080\",\"https\":\"https://127.0.0.1:8080\"}");
+		py.append("\n\nproxy = {}");
+		
 		String requestsMethodPrefix =
 			"\n" + (withSessionObject ? SESSION_VAR : "requests") + ".";
 		int i = 0;
@@ -87,6 +91,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			py.append('(').append(prefix).append("url, headers=");
 			py.append(prefix).append("headers");
 			if (cookiesExist) py.append(", cookies=").append(prefix).append("cookies");
+			py.append(", proxies=proxy");
+			py.append(", verify=False");
 			if (bodyType != null) {
 				String kind = bodyType.toString().toLowerCase();
 				py.append(", ").append(kind).append('=').append(prefix).append(kind);
