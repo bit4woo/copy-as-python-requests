@@ -1,11 +1,22 @@
 package burp;
 
-import java.util.*;
-import java.awt.datatransfer.*;
-import java.awt.event.*;
 import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.ClipboardOwner;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.TreeMap;
+
 import javax.swing.JMenuItem;
 
 import mjson.Json;
@@ -69,9 +80,9 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 
 		py.append("\nproxy = {\"http\":\"http://127.0.0.1:8080\",\"https\":\"http://127.0.0.1:8080\"}#for python3 https proxy also use http protocol");
 		py.append("\n#proxy = {}");
-		
+
 		String requestsMethodPrefix =
-			"\n" + (withSessionObject ? SESSION_VAR : "try:\n    response = requests") + ".";//python缩进4个空格
+				"\n" + (withSessionObject ? SESSION_VAR : "try:\n    response = requests") + ".";//python缩进4个空格
 		int i = 0;
 
 		if (withSessionObject) {
@@ -82,19 +93,19 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			IRequestInfo ri = helpers.analyzeRequest(message);
 			byte[] req = message.getRequest();
 			String prefix = "burp" + i++ + "_";
-			
+
 			py.append("\n\n").append(prefix).append("url = \"");
 			py.append(escapeQuotes(ri.getUrl().toString()));
 			py.append('"');
-			
+
 			List<String> headers = ri.getHeaders();
 			boolean cookiesExist = processCookies(prefix, py, headers);
 			py.append('\n').append(prefix).append("headers = {");
 			processHeaders(py, headers);
 			py.append('}');
-			
+
 			BodyType bodyType = processBody(prefix, py, req, ri);
-			
+
 			py.append(requestsMethodPrefix);
 			py.append(ri.getMethod().toLowerCase());
 			py.append('(').append(prefix).append("url, headers=");
@@ -108,8 +119,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 				py.append(", ").append(kind).append('=').append(prefix).append(kind);
 			}
 			py.append(')');
-			
-			
+
+
 			if (isJson(message)) {
 				py.append("\n    body_json = response.json()");
 			}else if (isHtml(message)) {
@@ -117,19 +128,19 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			}else {
 				py.append("\n    body_bytes = response.content #bytes");
 			}
-			
+
 			py.append("\nexcept Exception as e:");
 			py.append("\n    print(e)");//python缩进4个空格
 		}
 
 		Toolkit.getDefaultToolkit().getSystemClipboard()
-			.setContents(new StringSelection(py.toString()), this);
+		.setContents(new StringSelection(py.toString()), this);
 	}
-	
+
 	public boolean isJson(IHttpRequestResponse message) {
 		try {
 			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
-			
+
 			String dataType = resp.getStatedMimeType();
 			String dataType1 = resp.getInferredMimeType();
 			stdout.println(dataType+" "+dataType1);
@@ -141,7 +152,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		}
 		return false;
 	}
-	
+
 	public boolean isHtml(IHttpRequestResponse message) {
 		try {
 			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
@@ -156,7 +167,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		}
 		return false;
 	}
-	
+
 	public boolean isImage(IHttpRequestResponse message) {
 		try {
 			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
@@ -203,26 +214,27 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 
 	private static void processHeaders(StringBuilder py, List<String> headers) {
 		boolean firstHeader = true;
-header_loop:
-		for (String header : headers) {
-			String lowerCaseHeader = header.toLowerCase();
-			for (String headerToIgnore : IGNORE_HEADERS) {
-				if (lowerCaseHeader.startsWith(headerToIgnore)) continue header_loop;
-			}
-			header = escapeQuotes(header);
-			int colonPos = header.indexOf(':');
-			if (colonPos == -1) continue;
-			if (firstHeader) {
-				firstHeader = false;
+		header_loop:
+			for (String header : headers) {
+				if (headers.indexOf(header) ==0) continue;//忽略第一行，有时候如果第一行包含了分号，也会被添加进来
+				String lowerCaseHeader = header.toLowerCase();
+				for (String headerToIgnore : IGNORE_HEADERS) {
+					if (lowerCaseHeader.startsWith(headerToIgnore)) continue header_loop;
+				}
+				header = escapeQuotes(header);
+				int colonPos = header.indexOf(':');
+				if (colonPos == -1) continue;
+				if (firstHeader) {
+					firstHeader = false;
+					py.append('"');
+				} else {
+					py.append(", \"");
+				}
+				py.append(header, 0, colonPos);
+				py.append("\": \"");
+				py.append(header, colonPos + 2, header.length());
 				py.append('"');
-			} else {
-				py.append(", \"");
 			}
-			py.append(header, 0, colonPos);
-			py.append("\": \"");
-			py.append(header, colonPos + 2, header.length());
-			py.append('"');
-		}
 	}
 
 	private BodyType processBody(String prefix, StringBuilder py,
@@ -277,7 +289,7 @@ header_loop:
 
 	private static String escapeQuotes(String value) {
 		return value.replace("\\", "\\\\").replace("\"", "\\\"")
-			.replace("\n", "\\n").replace("\r", "\\r");
+				.replace("\n", "\\n").replace("\r", "\\r");
 	}
 
 	private void escapeUrlEncodedBytes(byte[] input, StringBuilder output,
