@@ -104,6 +104,15 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			}
 			py.append(')');
 			
+			
+			if (isJson(message)) {
+				py.append("\n    body_json = response.json()");
+			}else if (isText(message)) {
+				py.append("\n    body_text = response.content.decode(\"utf-8\")");
+			}else {
+				py.append("\n    body_bytes = response.content #bytes");
+			}
+			
 			py.append("\nexcept Exception as e:");
 			py.append("\n    print(e)");//python缩进4个空格
 		}
@@ -111,6 +120,36 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		Toolkit.getDefaultToolkit().getSystemClipboard()
 			.setContents(new StringSelection(py.toString()), this);
 	}
+	
+	public boolean isJson(IHttpRequestResponse message) {
+		try {
+			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
+			
+			String dataType = resp.getStatedMimeType();
+			String dataType1 = resp.getInferredMimeType();
+			if(dataType.toLowerCase().contains("json") || dataType1.toLowerCase().contains("json")) {
+				return true;
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
+	
+	public boolean isText(IHttpRequestResponse message) {
+		try {
+			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
+			String dataType = resp.getStatedMimeType();
+			String dataType1 = resp.getInferredMimeType();
+			if(dataType.toLowerCase().contains("text") || dataType1.toLowerCase().contains("text")) {
+				return true;
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
+	
 
 	private static boolean processCookies(String prefix, StringBuilder py,
 			List<String> headers) {
