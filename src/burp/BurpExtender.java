@@ -14,7 +14,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	private IExtensionHelpers helpers;
 
 	private final static String NAME = "Copy as requests";
-	private final static String SESSION_MENU_ITEM = NAME + " with session object";
+	private final static String SESSION_MENU_ITEM = NAME + " with session";
 	private final static String[] PYTHON_ESCAPE = new String[256];
 	private final static String SESSION_VAR = "session";
 
@@ -62,30 +62,34 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	private void copyMessages(IHttpRequestResponse[] messages, boolean withSessionObject) {
 		StringBuilder py = new StringBuilder("import requests");
 
-		py.append("\n\nproxy = {\"http\":\"http://127.0.0.1:8080\",\"https\":\"https://127.0.0.1:8080\"}");
-		py.append("\n\nproxy = {}");
+		py.append("\nproxy = {\"http\":\"http://127.0.0.1:8080\",\"https\":\"http://127.0.0.1:8080\"}#for python3 https proxy also use http protocol");
+		py.append("\n#proxy = {}");
 		
 		String requestsMethodPrefix =
-			"\n" + (withSessionObject ? SESSION_VAR : "requests") + ".";
+			"\n" + (withSessionObject ? SESSION_VAR : "try:\n    response = requests") + ".";//python缩进4个空格
 		int i = 0;
 
 		if (withSessionObject) {
-			py.append("\n\n" + SESSION_VAR + " = requests.session()");
+			py.append("\n\n" + SESSION_VAR + "try:\n    response = requests.session()");//python缩进4个空格
 		}
 
 		for (IHttpRequestResponse message : messages) {
 			IRequestInfo ri = helpers.analyzeRequest(message);
 			byte[] req = message.getRequest();
 			String prefix = "burp" + i++ + "_";
+			
 			py.append("\n\n").append(prefix).append("url = \"");
 			py.append(escapeQuotes(ri.getUrl().toString()));
 			py.append('"');
+			
 			List<String> headers = ri.getHeaders();
 			boolean cookiesExist = processCookies(prefix, py, headers);
 			py.append('\n').append(prefix).append("headers = {");
 			processHeaders(py, headers);
 			py.append('}');
+			
 			BodyType bodyType = processBody(prefix, py, req, ri);
+			
 			py.append(requestsMethodPrefix);
 			py.append(ri.getMethod().toLowerCase());
 			py.append('(').append(prefix).append("url, headers=");
@@ -93,11 +97,15 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			if (cookiesExist) py.append(", cookies=").append(prefix).append("cookies");
 			py.append(", proxies=proxy");
 			py.append(", verify=False");
+
 			if (bodyType != null) {
 				String kind = bodyType.toString().toLowerCase();
 				py.append(", ").append(kind).append('=').append(prefix).append(kind);
 			}
 			py.append(')');
+			
+			py.append("\nexcept Exception as e:");
+			py.append("\n    print(e)");//python缩进4个空格
 		}
 
 		Toolkit.getDefaultToolkit().getSystemClipboard()
