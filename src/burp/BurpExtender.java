@@ -4,6 +4,7 @@ import java.util.*;
 import java.awt.datatransfer.*;
 import java.awt.event.*;
 import java.awt.Toolkit;
+import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import javax.swing.JMenuItem;
 
@@ -12,6 +13,8 @@ import mjson.Json;
 public class BurpExtender implements IBurpExtender, IContextMenuFactory, ClipboardOwner
 {
 	private IExtensionHelpers helpers;
+	private IBurpExtenderCallbacks callbacks;
+	private PrintWriter stdout;
 
 	private final static String NAME = "Copy as requests";
 	private final static String SESSION_MENU_ITEM = NAME + " with session";
@@ -31,6 +34,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	@Override
 	public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks)
 	{
+		this.callbacks = callbacks;
+		stdout = new PrintWriter(callbacks.getStdout(), true);
 		helpers = callbacks.getHelpers();
 		callbacks.setExtensionName(NAME);
 		callbacks.registerContextMenuFactory(this);
@@ -107,7 +112,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			
 			if (isJson(message)) {
 				py.append("\n    body_json = response.json()");
-			}else if (isText(message)) {
+			}else if (isHtml(message)) {
 				py.append("\n    body_text = response.content.decode(\"utf-8\")");
 			}else {
 				py.append("\n    body_bytes = response.content #bytes");
@@ -127,6 +132,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			
 			String dataType = resp.getStatedMimeType();
 			String dataType1 = resp.getInferredMimeType();
+			stdout.println(dataType+" "+dataType1);
 			if(dataType.toLowerCase().contains("json") || dataType1.toLowerCase().contains("json")) {
 				return true;
 			}
@@ -136,12 +142,13 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		return false;
 	}
 	
-	public boolean isText(IHttpRequestResponse message) {
+	public boolean isHtml(IHttpRequestResponse message) {
 		try {
 			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
 			String dataType = resp.getStatedMimeType();
 			String dataType1 = resp.getInferredMimeType();
-			if(dataType.toLowerCase().contains("text") || dataType1.toLowerCase().contains("text")) {
+			stdout.println(dataType+" "+dataType1);
+			if(dataType.toLowerCase().contains("html") || dataType1.toLowerCase().contains("html")) {
 				return true;
 			}
 		} catch (Exception e) {
@@ -150,6 +157,21 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		return false;
 	}
 	
+	public boolean isImage(IHttpRequestResponse message) {
+		try {
+			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
+			String dataType = resp.getStatedMimeType();
+			String dataType1 = resp.getInferredMimeType();
+			stdout.println(dataType+" "+dataType1);
+			if(dataType.toLowerCase().contains("image") || dataType1.toLowerCase().contains("png")
+					|| dataType1.toLowerCase().contains("jpeg")) {
+				return true;
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
 
 	private static boolean processCookies(String prefix, StringBuilder py,
 			List<String> headers) {
