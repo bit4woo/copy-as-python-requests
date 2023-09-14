@@ -77,9 +77,12 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 
 	private void copyMessages(IHttpRequestResponse[] messages, boolean withSessionObject) {
 		StringBuilder py = new StringBuilder("import requests");
-
-		py.append("\nproxy = {\"http\":\"http://127.0.0.1:8080\",\"https\":\"http://127.0.0.1:8080\"}#for python3 https proxy also use http protocol");
-		py.append("\n#proxy = {}");
+		
+		py.append("\nif platform.system() == 'Windows':\r\n"
+				+ "    proxy = {\"http\": \"http://127.0.0.1:8080\",\r\n"
+				+ "             \"https\": \"http://127.0.0.1:8080\"}  # for python3 https proxy also use http protocol\r\n"
+				+ "else:\r\n"
+				+ "    proxy = {}");
 
 		String requestsMethodPrefix =
 				"\n" + (withSessionObject ? SESSION_VAR : "try:\n    response = requests") + ".";//python缩进4个空格
@@ -99,6 +102,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			py.append('"');
 
 			List<String> headers = ri.getHeaders();
+			headers.remove(0);
 			boolean cookiesExist = processCookies(prefix, py, headers);
 			py.append('\n').append(prefix).append("headers = {");
 			processHeaders(py, headers);
