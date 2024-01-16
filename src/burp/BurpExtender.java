@@ -83,14 +83,16 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 				+ "             \"https\": \"http://127.0.0.1:8080\"}  # for python3 https proxy also use http protocol\r\n"
 				+ "else:\r\n"
 				+ "    proxy = {}");
-
-		String requestsMethodPrefix =
-				"\n" + (withSessionObject ? SESSION_VAR : "try:\n    response = requests") + ".";//python缩进4个空格
-		int i = 0;
-
+		
+		py = new StringBuilder();
+		String requestsMethodPrefix =null;
 		if (withSessionObject) {
-			py.append("\n\n" + SESSION_VAR + "try:\n    response = requests.session()");//python缩进4个空格
+			requestsMethodPrefix ="\n\ntry:\n    response = requests.session().";//python缩进4个空格
+		}else {
+			requestsMethodPrefix ="\n\ntry:\n    response = requests.";//python缩进4个空格
 		}
+
+		int i = 0;
 
 		for (IHttpRequestResponse message : messages) {
 			IRequestInfo ri = helpers.analyzeRequest(message);
