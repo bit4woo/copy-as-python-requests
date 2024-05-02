@@ -24,14 +24,11 @@ import mjson.Json;
 public class BurpExtender implements IBurpExtender, IContextMenuFactory, ClipboardOwner
 {
 	private IExtensionHelpers helpers;
-	private IBurpExtenderCallbacks callbacks;
 	private PrintWriter stdout;
 
 	private final static String NAME = "Copy as requests";
 	private final static String SESSION_MENU_ITEM = NAME + " with session";
 	private final static String[] PYTHON_ESCAPE = new String[256];
-	private final static String SESSION_VAR = "session";
-
 	static {
 		for (int i = 0x00; i <= 0xFF; i++) PYTHON_ESCAPE[i] = String.format("\\x%02x", i);
 		for (int i = 0x20; i < 0x80; i++) PYTHON_ESCAPE[i] = String.valueOf((char)i);
@@ -45,7 +42,6 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	@Override
 	public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks)
 	{
-		this.callbacks = callbacks;
 		stdout = new PrintWriter(callbacks.getStdout(), true);
 		helpers = callbacks.getHelpers();
 		callbacks.setExtensionName(NAME);
@@ -116,7 +112,11 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			py.append(ri.getMethod().toLowerCase());
 			py.append('(').append(prefix).append("url, headers=");
 			py.append(prefix).append("headers");
-			if (cookiesExist) py.append(", cookies=").append(prefix).append("cookies");
+			if (cookiesExist) {
+				if (!withSessionObject) {
+					py.append(", cookies=").append(prefix).append("cookies");
+				}
+			}
 			py.append(", proxies=proxy");
 			py.append(", verify=False");
 
