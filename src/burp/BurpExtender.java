@@ -136,7 +136,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			}
 
 			py.append("\nexcept Exception as e:");
-			py.append("\n    print(e)");//python缩进4个空格
+			py.append("\n    traceback.print_exc()");//python缩进4个空格
 		}
 
 		Toolkit.getDefaultToolkit().getSystemClipboard()
