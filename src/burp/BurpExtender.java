@@ -87,7 +87,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		py = new StringBuilder();
 		String requestsMethodPrefix =null;
 		if (withSessionObject) {
-			requestsMethodPrefix ="\n\ntry:\n    response = requests.session().";//python缩进4个空格
+			requestsMethodPrefix ="\n\ntry:\n    # session = requests.session();\n    response = session.";//python缩进4个空格
 		}else {
 			requestsMethodPrefix ="\n\ntry:\n    response = requests.";//python缩进4个空格
 		}
