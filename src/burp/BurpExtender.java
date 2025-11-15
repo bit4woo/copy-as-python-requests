@@ -9,6 +9,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
@@ -21,8 +22,7 @@ import javax.swing.JMenuItem;
 
 import mjson.Json;
 
-public class BurpExtender implements IBurpExtender, IContextMenuFactory, ClipboardOwner
-{
+public class BurpExtender implements IBurpExtender, IContextMenuFactory, ClipboardOwner {
 	private IExtensionHelpers helpers;
 	private PrintWriter stdout;
 
@@ -30,8 +30,10 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	private final static String SESSION_MENU_ITEM = NAME + " with session";
 	private final static String[] PYTHON_ESCAPE = new String[256];
 	static {
-		for (int i = 0x00; i <= 0xFF; i++) PYTHON_ESCAPE[i] = String.format("\\x%02x", i);
-		for (int i = 0x20; i < 0x80; i++) PYTHON_ESCAPE[i] = String.valueOf((char)i);
+		for (int i = 0x00; i <= 0xFF; i++)
+			PYTHON_ESCAPE[i] = String.format("\\x%02x", i);
+		for (int i = 0x20; i < 0x80; i++)
+			PYTHON_ESCAPE[i] = String.valueOf((char) i);
 		PYTHON_ESCAPE['\n'] = "\\n";
 		PYTHON_ESCAPE['\r'] = "\\r";
 		PYTHON_ESCAPE['\t'] = "\\t";
@@ -40,8 +42,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	}
 
 	@Override
-	public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks)
-	{
+	public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks) {
 		stdout = new PrintWriter(callbacks.getStdout(), true);
 		helpers = callbacks.getHelpers();
 		callbacks.setExtensionName(NAME);
@@ -51,7 +52,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	@Override
 	public List<JMenuItem> createMenuItems(IContextMenuInvocation invocation) {
 		final IHttpRequestResponse[] messages = invocation.getSelectedMessages();
-		if (messages == null || messages.length == 0) return null;
+		if (messages == null || messages.length == 0)
+			return null;
 		JMenuItem i1 = new JMenuItem(NAME);
 		i1.addActionListener(new ActionListener() {
 			@Override
@@ -69,41 +71,62 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		return Arrays.asList(i1, i2);
 	}
 
-	private enum BodyType {JSON, DATA};
+	private enum BodyType {
+		JSON, DATA
+	};
 
 	private void copyMessages(IHttpRequestResponse[] messages, boolean withSessionObject) {
 		StringBuilder py = new StringBuilder("import requests");
-		
-		py.append("\nif platform.system() == 'Windows':\r\n"
-				+ "    proxy = {\"http\": \"http://127.0.0.1:8080\",\r\n"
+
+		py.append("\nif platform.system() == 'Windows':\r\n" + "    proxy = {\"http\": \"http://127.0.0.1:8080\",\r\n"
 				+ "             \"https\": \"http://127.0.0.1:8080\"}  # for python3 https proxy also use http protocol\r\n"
-				+ "else:\r\n"
-				+ "    proxy = {}");
-		
+				+ "else:\r\n" + "    proxy = {}");
+
 		py = new StringBuilder();
-		String requestsMethodPrefix =null;
+		String requestsMethodPrefix = null;
 		if (withSessionObject) {
-			requestsMethodPrefix ="\n\ntry:\n    # session = requests.session();\n    response = session.";//python缩进4个空格
-		}else {
-			requestsMethodPrefix ="\n\ntry:\n    response = requests.";//python缩进4个空格
+			requestsMethodPrefix = "\n\ntry:\n    # session = requests.session();\n    response = session.";// python缩进4个空格
+		} else {
+			requestsMethodPrefix = "\n\ntry:\n    response = requests.";// python缩进4个空格
 		}
 
 		int i = 0;
 
 		for (IHttpRequestResponse message : messages) {
 			IRequestInfo ri = helpers.analyzeRequest(message);
+			IHttpService serv = message.getHttpService();
 			byte[] req = message.getRequest();
-			String prefix = "burp" + i++ + "_";
+			
+			String base_url = serv.getProtocol() + "://" + serv.getHost();
+			if (serv.getPort() == 443 && serv.getProtocol().toLowerCase() == "https") {
 
-			py.append("\n\n").append(prefix).append("url = \"");
-			py.append(escapeQuotes(ri.getUrl().toString()));
-			py.append('"');
+			} else if (serv.getPort() == 80 && serv.getProtocol().toLowerCase() == "http") {
+
+			} else {
+				base_url = base_url + ":" + serv.getPort();
+			}
+
+			URL url = ri.getUrl();
+			String url_str = ri.getUrl().toString();
+			if (url.getPort() == url.getDefaultPort()) {
+				url_str = url_str.replaceFirst(":" + url.getPort(), "");
+				url_str = url_str.replaceFirst(base_url, "{base_url}");
+			}
 
 			List<String> headers = ri.getHeaders();
 			headers.remove(0);
+
+			
+			py.append("base_url = \"").append(base_url).append("\"");
+			
+			String prefix = "burp" + i++ + "_";
+			py.append("\n\n").append(prefix).append("url = f\"");
+			py.append(escapeQuotes(url_str));
+			py.append('"');
+
 			boolean cookiesExist = processCookies(prefix, py, headers);
 			py.append('\n').append(prefix).append("headers = {");
-			processHeaders(py, headers);
+			processHeaders(py, headers,base_url);
 			py.append('}');
 
 			BodyType bodyType = processBody(prefix, py, req, ri);
@@ -126,21 +149,19 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			}
 			py.append(')');
 
-
 			if (isJson(message)) {
 				py.append("\n    body_json = response.json()");
-			}else if (isHtml(message)) {
-				py.append("\n    body_text = response.content.decode(\"utf-8\")");
-			}else {
+			} else if (isHtml(message)) {
+				py.append("\n    body_text = response.text");
+			} else {
 				py.append("\n    body_bytes = response.content #bytes");
 			}
 
 			py.append("\nexcept Exception as e:");
-			py.append("\n    traceback.print_exc()");//python缩进4个空格
+			py.append("\n    traceback.print_exc()");// python缩进4个空格
 		}
 
-		Toolkit.getDefaultToolkit().getSystemClipboard()
-		.setContents(new StringSelection(py.toString()), this);
+		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(py.toString()), this);
 	}
 
 	public boolean isJson(IHttpRequestResponse message) {
@@ -149,8 +170,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 
 			String dataType = resp.getStatedMimeType();
 			String dataType1 = resp.getInferredMimeType();
-			stdout.println(dataType+" "+dataType1);
-			if(dataType.toLowerCase().contains("json") || dataType1.toLowerCase().contains("json")) {
+			stdout.println(dataType + " " + dataType1);
+			if (dataType.toLowerCase().contains("json") || dataType1.toLowerCase().contains("json")) {
 				return true;
 			}
 		} catch (Exception e) {
@@ -164,8 +185,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
 			String dataType = resp.getStatedMimeType();
 			String dataType1 = resp.getInferredMimeType();
-			stdout.println(dataType+" "+dataType1);
-			if(dataType.toLowerCase().contains("html") || dataType1.toLowerCase().contains("html")) {
+			stdout.println(dataType + " " + dataType1);
+			if (dataType.toLowerCase().contains("html") || dataType1.toLowerCase().contains("html")) {
 				return true;
 			}
 		} catch (Exception e) {
@@ -179,8 +200,8 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			IResponseInfo resp = helpers.analyzeResponse(message.getResponse());
 			String dataType = resp.getStatedMimeType();
 			String dataType1 = resp.getInferredMimeType();
-			stdout.println(dataType+" "+dataType1);
-			if(dataType.toLowerCase().contains("image") || dataType1.toLowerCase().contains("png")
+			stdout.println(dataType + " " + dataType1);
+			if (dataType.toLowerCase().contains("image") || dataType1.toLowerCase().contains("png")
 					|| dataType1.toLowerCase().contains("jpeg")) {
 				return true;
 			}
@@ -190,13 +211,13 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		return false;
 	}
 
-	private static boolean processCookies(String prefix, StringBuilder py,
-			List<String> headers) {
+	private static boolean processCookies(String prefix, StringBuilder py, List<String> headers) {
 		ListIterator<String> iter = headers.listIterator();
 		boolean cookiesExist = false;
 		while (iter.hasNext()) {
 			String header = iter.next();
-			if (!header.toLowerCase().startsWith("cookie:")) continue;
+			if (!header.toLowerCase().startsWith("cookie:"))
+				continue;
 			iter.remove();
 			for (String cookie : header.substring(8).split("; ?")) {
 				if (cookiesExist) {
@@ -212,41 +233,53 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 				py.append('"');
 			}
 		}
-		if (cookiesExist) py.append('}');
+		if (cookiesExist)
+			py.append('}');
 		return cookiesExist;
 	}
 
 	private static final Collection<String> IGNORE_HEADERS = Arrays.asList("host:", "content-length:");
+	private static final Collection<String> URL_HEADERS = Arrays.asList("Referer:", "Origin:");
 
-	private static void processHeaders(StringBuilder py, List<String> headers) {
+	private static void processHeaders(StringBuilder py, List<String> headers,String base_url) {
 		boolean firstHeader = true;
-		header_loop:
-			for (String header : headers) {
-				if (headers.indexOf(header) ==0) continue;//忽略第一行，有时候如果第一行包含了分号，也会被添加进来
-				String lowerCaseHeader = header.toLowerCase();
-				for (String headerToIgnore : IGNORE_HEADERS) {
-					if (lowerCaseHeader.startsWith(headerToIgnore)) continue header_loop;
-				}
-				header = escapeQuotes(header);
-				int colonPos = header.indexOf(':');
-				if (colonPos == -1) continue;
-				if (firstHeader) {
-					firstHeader = false;
-					py.append('"');
-				} else {
-					py.append(", \"");
-				}
-				py.append(header, 0, colonPos);
-				py.append("\": \"");
-				py.append(header, colonPos + 2, header.length());
-				py.append('"');
+		header_loop: for (String header : headers) {
+			if (headers.indexOf(header) == 0)
+				continue;// 忽略第一行，有时候如果第一行包含了分号，也会被添加进来
+			String lowerCaseHeader = header.toLowerCase();
+			for (String headerToIgnore : IGNORE_HEADERS) {
+				if (lowerCaseHeader.startsWith(headerToIgnore))
+					continue header_loop;
 			}
+			
+			for (String urlHeader : URL_HEADERS) {
+				if (lowerCaseHeader.startsWith(urlHeader))
+					header = header.replaceFirst(base_url, "{base_url}");
+			}
+			
+			header = escapeQuotes(header);
+			
+			
+			int colonPos = header.indexOf(':');
+			if (colonPos == -1)
+				continue;
+			if (firstHeader) {
+				firstHeader = false;
+				py.append('"');
+			} else {
+				py.append(", \"");
+			}
+			py.append(header, 0, colonPos);
+			py.append("\": \"");
+			py.append(header, colonPos + 2, header.length());
+			py.append('"');
+		}
 	}
 
-	private BodyType processBody(String prefix, StringBuilder py,
-			byte[] req, IRequestInfo ri) {
+	private BodyType processBody(String prefix, StringBuilder py, byte[] req, IRequestInfo ri) {
 		int bo = ri.getBodyOffset();
-		if (bo >= req.length - 2) return null;
+		if (bo >= req.length - 2)
+			return null;
 		py.append('\n').append(prefix);
 		byte contentType = ri.getContentType();
 		if (contentType == IRequestInfo.CONTENT_TYPE_JSON) {
@@ -267,21 +300,24 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 			for (int pos = bo; pos < req.length; pos++) {
 				byte b = req[pos];
 				if (keyEnd == -1) {
-					if (b == (byte)'=') {
+					if (b == (byte) '=') {
 						if (pos == req.length - 1) {
-							if (!firstKey) py.append(", ");
+							if (!firstKey)
+								py.append(", ");
 							escapeUrlEncodedBytes(req, py, keyStart, pos);
 							py.append(": ''");
 						} else {
 							keyEnd = pos;
 						}
 					}
-				} else if (b == (byte)'&' || pos == req.length - 1) {
-					if (firstKey) firstKey = false; else py.append(", ");
+				} else if (b == (byte) '&' || pos == req.length - 1) {
+					if (firstKey)
+						firstKey = false;
+					else
+						py.append(", ");
 					escapeUrlEncodedBytes(req, py, keyStart, keyEnd);
 					py.append(": ");
-					escapeUrlEncodedBytes(req, py, keyEnd + 1,
-							pos == req.length - 1 ? req.length : pos);
+					escapeUrlEncodedBytes(req, py, keyEnd + 1, pos == req.length - 1 ? req.length : pos);
 					keyEnd = -1;
 					keyStart = pos + 1;
 				}
@@ -294,12 +330,10 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	}
 
 	private static String escapeQuotes(String value) {
-		return value.replace("\\", "\\\\").replace("\"", "\\\"")
-				.replace("\n", "\\n").replace("\r", "\\r");
+		return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
 	}
 
-	private void escapeUrlEncodedBytes(byte[] input, StringBuilder output,
-			int start, int end) {
+	private void escapeUrlEncodedBytes(byte[] input, StringBuilder output, int start, int end) {
 		if (end > start) {
 			byte[] dec = helpers.urlDecode(Arrays.copyOfRange(input, start, end));
 			escapeBytes(dec, output, 0, dec.length);
@@ -362,8 +396,7 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 		output.append('"');
 	}
 
-	private static void escapeBytes(byte[] input, StringBuilder output,
-			int start, int end) {
+	private static void escapeBytes(byte[] input, StringBuilder output, int start, int end) {
 		output.append('"');
 		for (int pos = start; pos < end; pos++) {
 			output.append(PYTHON_ESCAPE[input[pos] & 0xFF]);
@@ -372,5 +405,6 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 	}
 
 	@Override
-	public void lostOwnership(Clipboard aClipboard, Transferable aContents) {}
+	public void lostOwnership(Clipboard aClipboard, Transferable aContents) {
+	}
 }
