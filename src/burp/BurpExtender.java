@@ -248,12 +248,12 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 				continue;// 忽略第一行，有时候如果第一行包含了分号，也会被添加进来
 			String lowerCaseHeader = header.toLowerCase();
 			for (String headerToIgnore : IGNORE_HEADERS) {
-				if (lowerCaseHeader.startsWith(headerToIgnore))
+				if (lowerCaseHeader.startsWith(headerToIgnore.toLowerCase()))
 					continue header_loop;
 			}
 			
 			for (String urlHeader : URL_HEADERS) {
-				if (lowerCaseHeader.startsWith(urlHeader))
+				if (lowerCaseHeader.startsWith(urlHeader.toLowerCase()))
 					header = header.replaceFirst(base_url, "{base_url}");
 			}
 			
@@ -270,7 +270,11 @@ public class BurpExtender implements IBurpExtender, IContextMenuFactory, Clipboa
 				py.append(", \"");
 			}
 			py.append(header, 0, colonPos);
-			py.append("\": \"");
+			if (header.contains("{base_url}")) {
+				py.append("\": f\"");
+			}else {
+				py.append("\": \"");
+			}
 			py.append(header, colonPos + 2, header.length());
 			py.append('"');
 		}
